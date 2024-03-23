@@ -1,3 +1,5 @@
+console.log('test');
+
 export function createHooks(callback) {
   let stateIndex = 0;
   const states = [];
