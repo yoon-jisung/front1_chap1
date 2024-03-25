@@ -1,5 +1,5 @@
 export function jsx(type, props, ...children) {
-  return { type, props: props || {}, children };
+  return { type, props, children: children.flat() };
 }
 
 export function createElement(node) {
@@ -7,56 +7,45 @@ export function createElement(node) {
     return document.createTextNode(node);
   }
 
-  const element = document.createElement(node.type);
-  Object.entries(node.props).forEach(([key, value]) => {
-    element.setAttribute(key, value);
-  });
+  const $el = document.createElement(node.type);
 
-  node.children.map(createElement).forEach((child) => element.appendChild(child));
+  Object.entries(node.props ?? {})
+    .filter(([, value]) => value)
+    .forEach(([attr, value]) => $el.setAttribute(attr, value));
 
-  return element;
+  node.children.map(createElement).forEach((child) => $el.appendChild(child));
+
+  return $el;
 }
 
-function updateAttributes(target, newProps, oldProps = {}) {
-  Object.entries(newProps).forEach(([key, value]) => {
-    if (oldProps[key] !== value) {
-      target.setAttribute(key, value);
-    }
-  });
+function updateAttributes(target, newProps, oldProps) {
+  for (const [attr, value] of Object.entries(newProps)) {
+    if (oldProps[attr] === newProps[attr]) continue;
+    target.setAttribute(attr, value);
+  }
 
-  Object.keys(oldProps).forEach((key) => {
-    if (!(key in newProps)) {
-      target.removeAttribute(key);
-    }
-  });
+  for (const attr of Object.keys(oldProps)) {
+    if (newProps[attr] !== undefined) continue;
+    target.removeAttribute(attr);
+  }
 }
 
-export function render(parent, newNode, oldNode = {}, index = 0) {
-  if (!parent) return;
-
-  if (!oldNode || typeof newNode !== typeof oldNode || newNode.type !== oldNode.type) {
-    const newElement = createElement(newNode);
-    if (parent.childNodes[index]) {
-      parent.replaceChild(newElement, parent.childNodes[index]);
-    } else {
-      parent.appendChild(newElement);
-    }
-    return;
+export function render(parent, newNode, oldNode, index = 0) {
+  if (!newNode && oldNode) return parent.removeChild(parent.childNode[index]);
+  if (newNode && !oldNode) return parent.appendChild(createElement(newNode));
+  if (typeof newNode === 'string' && typeof oldNode === 'string') {
+    if (newNode === oldNode) return;
+    return parent.replaceChild(createElement(newNode), parent.childNodes[index]);
+  }
+  if (newNode.type !== oldNode.type) {
+    return parent.replaceChild(createElement(newNode), parent.childNodes[index]);
   }
 
-  if (typeof newNode === 'string' && newNode !== oldNode) {
-    parent.childNodes[index].nodeValue = newNode;
-    return;
-  }
+  updateAttributes(parent.childNodes[index], newNode.props || {}, oldNode.props || {});
 
-  updateAttributes(parent.childNodes[index], newNode.props, oldNode.props);
+  const maxLength = Math.max(newNode.children.length, oldNode.children.length);
 
-  const max = Math.max(newNode.children.length, oldNode.children.length);
-  for (let i = 0; i < max; i++) {
-    render(parent.childNodes[index], newNode.children[i], oldNode.children[i] || {}, i);
-  }
-
-  while (parent.childNodes[index].childNodes.length > newNode.children.length) {
-    parent.childNodes[index].removeChild(parent.childNodes[index].lastChild);
+  for (let i = 0; i < maxLength; i++) {
+    render(parent.childNodes[index], newNode.children[i], oldNode.children[i], i);
   }
 }
